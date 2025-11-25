@@ -86,6 +86,10 @@
             background: white;
         }
 
+        #drawingArea.tablet-mode.force-landscape {
+            transform-origin: top left;
+        }
+
         #canvas {
             display: block;
             touch-action: none;
@@ -164,27 +168,12 @@
         }
 
         .landscape-hint {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 30px 40px;
-            border-radius: 15px;
-            text-align: center;
-            z-index: 10000;
-            font-size: 18px;
             display: none;
-        }
-
-        .landscape-hint.show {
-            display: block;
         }
 
         @media screen and (max-width: 768px) and (orientation: portrait) {
             #drawingArea.tablet-mode .landscape-hint {
-                display: block;
+                display: none;
             }
         }
     </style>
@@ -213,9 +202,6 @@
     </div>
 
     <div id="drawingArea">
-        <div class="landscape-hint" id="landscapeHint">
-            📱 Please rotate your device to landscape mode for the best drawing experience
-        </div>
         <div class="toolbar">
             <label>Color:</label>
             <input type="color" id="colorPicker" value="#000000">
@@ -276,17 +262,6 @@
             document.getElementById('startScreen').classList.add('hidden');
             document.getElementById('tabletScreen').classList.remove('hidden');
             document.getElementById('connectionCode').textContent = sessionCode;
-
-            // Request landscape orientation for tablet mode
-            if (screen.orientation && screen.orientation.lock) {
-                try {
-                    await screen.orientation.lock('landscape').catch(() => {
-                        // Silently fail if orientation lock not supported
-                    });
-                } catch (e) {
-                    // Orientation lock not supported
-                }
-            }
 
             await setupPeerConnection(true);
         };
@@ -444,29 +419,59 @@
         function initDrawing() {
             document.getElementById('drawingArea').style.display = 'block';
             
-            // Mark as tablet mode if this is the tablet
+            // Mark as tablet mode and rotate if this is the tablet
             if (role === 'tablet') {
                 document.getElementById('drawingArea').classList.add('tablet-mode');
-                checkOrientation();
-                window.addEventListener('orientationchange', checkOrientation);
-                window.addEventListener('resize', checkOrientation);
+                rotateToLandscape();
+                window.addEventListener('resize', rotateToLandscape);
             }
             
             canvas = document.getElementById('canvas');
             ctx = canvas.getContext('2d');
 
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-
+            updateCanvasSize();
             setupEventListeners();
         }
 
-        function checkOrientation() {
-            const hint = document.getElementById('landscapeHint');
-            if (window.innerWidth < window.innerHeight && window.innerWidth < 768) {
-                hint.classList.add('show');
+        function rotateToLandscape() {
+            const drawingArea = document.getElementById('drawingArea');
+            const isPortrait = window.innerHeight > window.innerWidth;
+            
+            if (isPortrait && role === 'tablet') {
+                drawingArea.classList.add('force-landscape');
+                const scale = window.innerHeight / window.innerWidth;
+                drawingArea.style.transform = `rotate(90deg) scale(${scale})`;
+                drawingArea.style.transformOrigin = 'top left';
+                drawingArea.style.width = `${window.innerHeight}px`;
+                drawingArea.style.height = `${window.innerWidth}px`;
+                drawingArea.style.left = `${window.innerHeight}px`;
+                drawingArea.style.top = '0';
+                
+                updateCanvasSize();
             } else {
-                hint.classList.remove('show');
+                drawingArea.classList.remove('force-landscape');
+                drawingArea.style.transform = '';
+                drawingArea.style.width = '100%';
+                drawingArea.style.height = '100%';
+                drawingArea.style.left = '0';
+                drawingArea.style.top = '0';
+                
+                updateCanvasSize();
+            }
+        }
+
+        function updateCanvasSize() {
+            if (!canvas) return;
+            
+            const drawingArea = document.getElementById('drawingArea');
+            const isPortrait = window.innerHeight > window.innerWidth;
+            
+            if (isPortrait && role === 'tablet') {
+                canvas.width = window.innerHeight;
+                canvas.height = window.innerWidth;
+            } else {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
             }
         }
 
@@ -494,8 +499,7 @@
 
             window.addEventListener('resize', () => {
                 const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
+                updateCanvasSize();
                 ctx.putImageData(imgData, 0, 0);
             });
         }
