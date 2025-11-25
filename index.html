@@ -94,46 +94,48 @@
 
         .toolbar {
             position: fixed;
-            top: 10px;
+            top: 5px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px 25px;
-            border-radius: 50px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 6px 12px;
+            border-radius: 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
             display: flex;
-            gap: 15px;
+            gap: 8px;
             align-items: center;
             z-index: 1000;
-            flex-wrap: wrap;
-            justify-content: center;
+            font-size: 12px;
         }
 
         .toolbar label {
             font-weight: 600;
-            color: #333;
+            color: #fff;
+            font-size: 11px;
         }
 
         .toolbar input[type="color"] {
-            width: 50px;
-            height: 50px;
+            width: 30px;
+            height: 30px;
             border: none;
             border-radius: 50%;
             cursor: pointer;
         }
 
         .toolbar input[type="range"] {
-            width: 150px;
+            width: 80px;
         }
 
         .toolbar button {
             background: #ff6b6b;
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 25px;
+            padding: 6px 12px;
+            border-radius: 15px;
             cursor: pointer;
             font-weight: 600;
+            font-size: 11px;
         }
 
         .toolbar button:hover {
@@ -142,8 +144,9 @@
 
         .size-display {
             font-weight: 600;
-            color: #667eea;
-            min-width: 30px;
+            color: #fff;
+            min-width: 20px;
+            font-size: 11px;
         }
 
         .hidden {
@@ -454,11 +457,17 @@
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
+            // Normalize coordinates to 0-1 range
+            const normalizedX = x / canvas.width;
+            const normalizedY = y / canvas.height;
+            const normalizedLastX = lastX / canvas.width;
+            const normalizedLastY = lastY / canvas.height;
+
             const stroke = {
-                x1: lastX,
-                y1: lastY,
-                x2: x,
-                y2: y,
+                x1: normalizedLastX,
+                y1: normalizedLastY,
+                x2: normalizedX,
+                y2: normalizedY,
                 color: isEraser ? '#FFFFFF' : currentColor,
                 size: currentSize
             };
@@ -485,9 +494,15 @@
         }
 
         function drawStroke(stroke) {
+            // Convert normalized coordinates back to actual canvas coordinates
+            const actualX1 = stroke.x1 * canvas.width;
+            const actualY1 = stroke.y1 * canvas.height;
+            const actualX2 = stroke.x2 * canvas.width;
+            const actualY2 = stroke.y2 * canvas.height;
+
             ctx.beginPath();
-            ctx.moveTo(stroke.x1, stroke.y1);
-            ctx.lineTo(stroke.x2, stroke.y2);
+            ctx.moveTo(actualX1, actualY1);
+            ctx.lineTo(actualX2, actualY2);
             ctx.strokeStyle = stroke.color;
             ctx.lineWidth = stroke.size;
             ctx.lineCap = 'round';
