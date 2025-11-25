@@ -486,9 +486,23 @@
 
         function getCanvasCoordinates(clientX, clientY) {
             const rect = canvas.getBoundingClientRect();
-            const x = clientX - rect.left;
-            const y = clientY - rect.top;
-            return { x, y };
+            
+            if (isTabletRotated) {
+                // Transform coordinates for 90deg rotation
+                // When rotated: physical bottom becomes logical left, physical left becomes logical top
+                const physicalX = clientX - rect.left;
+                const physicalY = clientY - rect.top;
+                
+                // Map rotated coordinates back to canvas space
+                const x = physicalY;
+                const y = rect.width - physicalX;
+                
+                return { x, y };
+            } else {
+                const x = clientX - rect.left;
+                const y = clientY - rect.top;
+                return { x, y };
+            }
         }
 
         function startDrawing(e) {
