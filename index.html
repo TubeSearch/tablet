@@ -86,17 +86,6 @@
             background: white;
         }
 
-        #drawingArea.tablet-mode {
-            transform: rotate(90deg);
-            transform-origin: center center;
-            width: 100vh;
-            height: 100vw;
-            left: 50%;
-            top: 50%;
-            margin-left: -50vh;
-            margin-top: -50vw;
-        }
-
         #canvas {
             display: block;
             touch-action: none;
@@ -171,10 +160,6 @@
         }
 
         .connection-badge {
-            display: none;
-        }
-
-        .landscape-hint {
             display: none;
         }
     </style>
@@ -419,11 +404,6 @@
 
         function initDrawing() {
             document.getElementById('drawingArea').style.display = 'block';
-            
-            if (role === 'tablet') {
-                document.getElementById('drawingArea').classList.add('tablet-mode');
-            }
-            
             canvas = document.getElementById('canvas');
             ctx = canvas.getContext('2d');
 
