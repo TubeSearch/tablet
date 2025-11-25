@@ -21,18 +21,6 @@
             overflow: hidden;
         }
 
-        body.rotated {
-            transform: rotate(90deg);
-            transform-origin: center center;
-            width: 100vh;
-            height: 100vw;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            margin-left: -50vh;
-            margin-top: -50vw;
-        }
-
         .container {
             background: #2a2a2a;
             border-radius: 20px;
@@ -94,34 +82,31 @@
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             background: white;
-        }
-
-        body.rotated #drawingArea {
-            width: 100vh;
-            height: 100vw;
         }
 
         #canvas {
             display: block;
             touch-action: none;
             cursor: crosshair;
+            width: 100%;
+            height: 100%;
         }
 
         .toolbar {
             position: fixed;
-            top: 5px;
+            top: 10px;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.7);
             backdrop-filter: blur(10px);
-            padding: 6px 12px;
+            padding: 8px 15px;
             border-radius: 25px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
             display: flex;
-            gap: 8px;
+            gap: 10px;
             align-items: center;
             z-index: 1000;
             font-size: 12px;
@@ -176,10 +161,6 @@
             color: #999;
             font-style: italic;
         }
-
-        .connection-badge {
-            display: none;
-        }
     </style>
 </head>
 <body>
@@ -220,7 +201,7 @@
 
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, getDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyBKZOhqrbGqEHfXDWAHEJe1wRUWqF8q11M",
@@ -244,14 +225,12 @@
         let role = '';
         let lastX = 0;
         let lastY = 0;
+        let isTabletRotated = false;
 
-        // WebRTC variables
         let peerConnection = null;
         let dataChannel = null;
         let signalingUnsubscribe = null;
         let isConnected = false;
-        let lastPingTime = 0;
-        let latency = 0;
 
         const configuration = {
             iceServers: [
@@ -262,10 +241,17 @@
 
         window.startAsTablet = async function() {
             role = 'tablet';
+            isTabletRotated = true;
             sessionCode = generateCode();
             
-            // Rotate the screen
-            document.body.classList.add('rotated');
+            // Lock screen orientation to landscape
+            try {
+                if (screen.orientation && screen.orientation.lock) {
+                    await screen.orientation.lock('landscape');
+                }
+            } catch (e) {
+                console.log('Orientation lock not supported');
+            }
             
             document.getElementById('startScreen').classList.add('hidden');
             document.getElementById('tabletScreen').classList.remove('hidden');
@@ -276,6 +262,7 @@
 
         window.startAsReceiver = function() {
             role = 'receiver';
+            isTabletRotated = false;
             document.getElementById('startScreen').classList.add('hidden');
             document.getElementById('receiverScreen').classList.remove('hidden');
         };
@@ -429,14 +416,9 @@
             canvas = document.getElementById('canvas');
             ctx = canvas.getContext('2d');
 
-            // Set canvas size based on whether screen is rotated
-            if (document.body.classList.contains('rotated')) {
-                canvas.width = window.innerHeight;
-                canvas.height = window.innerWidth;
-            } else {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            }
+            // Set canvas resolution to match display size
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
 
             setupEventListeners();
         }
@@ -465,30 +447,35 @@
 
             window.addEventListener('resize', () => {
                 const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                if (document.body.classList.contains('rotated')) {
-                    canvas.width = window.innerHeight;
-                    canvas.height = window.innerWidth;
-                } else {
-                    canvas.width = window.innerWidth;
-                    canvas.height = window.innerHeight;
-                }
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
                 ctx.putImageData(imgData, 0, 0);
             });
         }
 
+        function getCanvasCoordinates(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            
+            // Get the actual position relative to canvas
+            const x = (clientX - rect.left) * (canvas.width / rect.width);
+            const y = (clientY - rect.top) * (canvas.height / rect.height);
+            
+            return { x, y };
+        }
+
         function startDrawing(e) {
             isDrawing = true;
-            const rect = canvas.getBoundingClientRect();
-            lastX = e.clientX - rect.left;
-            lastY = e.clientY - rect.top;
+            const coords = getCanvasCoordinates(e.clientX, e.clientY);
+            lastX = coords.x;
+            lastY = coords.y;
         }
 
         function draw(e) {
             if (!isDrawing) return;
 
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            const coords = getCanvasCoordinates(e.clientX, e.clientY);
+            const x = coords.x;
+            const y = coords.y;
 
             // Normalize coordinates to 0-1 range
             const normalizedX = x / canvas.width;
@@ -515,11 +502,39 @@
         function handleTouch(e) {
             e.preventDefault();
             const touch = e.touches[0];
-            const mouseEvent = new MouseEvent(e.type === 'touchstart' ? 'mousedown' : 'mousemove', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            canvas.dispatchEvent(mouseEvent);
+            
+            if (e.type === 'touchstart') {
+                const coords = getCanvasCoordinates(touch.clientX, touch.clientY);
+                isDrawing = true;
+                lastX = coords.x;
+                lastY = coords.y;
+            } else if (e.type === 'touchmove') {
+                if (!isDrawing) return;
+                
+                const coords = getCanvasCoordinates(touch.clientX, touch.clientY);
+                const x = coords.x;
+                const y = coords.y;
+
+                const normalizedX = x / canvas.width;
+                const normalizedY = y / canvas.height;
+                const normalizedLastX = lastX / canvas.width;
+                const normalizedLastY = lastY / canvas.height;
+
+                const stroke = {
+                    x1: normalizedLastX,
+                    y1: normalizedLastY,
+                    x2: normalizedX,
+                    y2: normalizedY,
+                    color: isEraser ? '#FFFFFF' : currentColor,
+                    size: currentSize
+                };
+
+                drawStroke(stroke);
+                sendMessage({ type: 'stroke', data: stroke });
+
+                lastX = x;
+                lastY = y;
+            }
         }
 
         function stopDrawing() {
@@ -527,7 +542,6 @@
         }
 
         function drawStroke(stroke) {
-            // Convert normalized coordinates back to actual canvas coordinates
             const actualX1 = stroke.x1 * canvas.width;
             const actualY1 = stroke.y1 * canvas.height;
             const actualX2 = stroke.x2 * canvas.width;
