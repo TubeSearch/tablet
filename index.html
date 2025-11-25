@@ -23,16 +23,6 @@
             padding: 0;
         }
 
-        body.tablet-rotated {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            transform: rotate(90deg) translateX(0);
-            transform-origin: center center;
-        }
-
         .container {
             background: #2a2a2a;
             border-radius: 20px;
@@ -97,15 +87,24 @@
             width: 100vw;
             height: 100vh;
             background: white;
+            overflow: hidden;
+        }
+
+        #drawingArea.rotated {
+            transform: rotate(90deg);
+            transform-origin: center center;
+            width: 100vh;
+            height: 100vw;
+            left: 50%;
+            top: 50%;
+            margin-left: -50vh;
+            margin-top: -50vw;
         }
 
         #canvas {
             display: block;
             touch-action: none;
             cursor: crosshair;
-            position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
         }
@@ -258,9 +257,6 @@
             role = 'tablet';
             isTabletRotated = true;
             sessionCode = generateCode();
-            
-            // Add rotation class to body
-            document.body.classList.add('tablet-rotated');
             
             document.getElementById('startScreen').classList.add('hidden');
             document.getElementById('tabletScreen').classList.remove('hidden');
@@ -421,21 +417,46 @@
         }
 
         function initDrawing() {
-            document.getElementById('drawingArea').style.display = 'block';
+            const drawingArea = document.getElementById('drawingArea');
+            drawingArea.style.display = 'block';
+            
+            if (isTabletRotated) {
+                drawingArea.classList.add('rotated');
+            }
+            
             canvas = document.getElementById('canvas');
             ctx = canvas.getContext('2d');
 
-            // Set canvas resolution based on rotation
-            if (isTabletRotated) {
-                // When rotated, swap width and height
-                canvas.width = window.innerHeight;
-                canvas.height = window.innerWidth;
-            } else {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            }
-
+            resizeCanvas();
             setupEventListeners();
+        }
+
+        function resizeCanvas() {
+            // Store current drawing
+            const imgData = canvas.width > 0 ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
+            
+            const dpr = window.devicePixelRatio || 1;
+            
+            // When rotated, we want the canvas to match the rotated container dimensions
+            if (isTabletRotated) {
+                // Container is rotated 90deg, so its visual dimensions are swapped
+                // The container width is 100vh and height is 100vw
+                canvas.style.width = '100%';
+                canvas.style.height = '100%';
+                canvas.width = window.innerHeight * dpr;
+                canvas.height = window.innerWidth * dpr;
+            } else {
+                canvas.style.width = '100%';
+                canvas.style.height = '100%';
+                canvas.width = window.innerWidth * dpr;
+                canvas.height = window.innerHeight * dpr;
+            }
+            
+            ctx.scale(dpr, dpr);
+            
+            if (imgData) {
+                ctx.putImageData(imgData, 0, 0);
+            }
         }
 
         function setupEventListeners() {
@@ -460,41 +481,14 @@
                 sendMessage({ type: 'size', size: parseInt(currentSize) });
             });
 
-            window.addEventListener('resize', () => {
-                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                if (isTabletRotated) {
-                    canvas.width = window.innerHeight;
-                    canvas.height = window.innerWidth;
-                } else {
-                    canvas.width = window.innerWidth;
-                    canvas.height = window.innerHeight;
-                }
-                ctx.putImageData(imgData, 0, 0);
-            });
+            window.addEventListener('resize', resizeCanvas);
         }
 
         function getCanvasCoordinates(clientX, clientY) {
             const rect = canvas.getBoundingClientRect();
-            
-            if (isTabletRotated) {
-                // When rotated, we need to transform the coordinates
-                // The visual rotation is 90deg clockwise, so we need to map:
-                // visual X -> canvas Y (from bottom)
-                // visual Y -> canvas X
-                const visualX = clientX - rect.left;
-                const visualY = clientY - rect.top;
-                
-                // Map to canvas coordinates accounting for rotation
-                const x = visualY * (canvas.width / rect.height);
-                const y = (rect.width - visualX) * (canvas.height / rect.width);
-                
-                return { x, y };
-            } else {
-                // No rotation, standard mapping
-                const x = (clientX - rect.left) * (canvas.width / rect.width);
-                const y = (clientY - rect.top) * (canvas.height / rect.height);
-                return { x, y };
-            }
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+            return { x, y };
         }
 
         function startDrawing(e) {
@@ -511,11 +505,15 @@
             const x = coords.x;
             const y = coords.y;
 
+            // Get the actual canvas dimensions (in CSS pixels, before DPR scaling)
+            const canvasDisplayWidth = isTabletRotated ? window.innerHeight : window.innerWidth;
+            const canvasDisplayHeight = isTabletRotated ? window.innerWidth : window.innerHeight;
+
             // Normalize coordinates to 0-1 range
-            const normalizedX = x / canvas.width;
-            const normalizedY = y / canvas.height;
-            const normalizedLastX = lastX / canvas.width;
-            const normalizedLastY = lastY / canvas.height;
+            const normalizedX = x / canvasDisplayWidth;
+            const normalizedY = y / canvasDisplayHeight;
+            const normalizedLastX = lastX / canvasDisplayWidth;
+            const normalizedLastY = lastY / canvasDisplayHeight;
 
             const stroke = {
                 x1: normalizedLastX,
@@ -549,10 +547,13 @@
                 const x = coords.x;
                 const y = coords.y;
 
-                const normalizedX = x / canvas.width;
-                const normalizedY = y / canvas.height;
-                const normalizedLastX = lastX / canvas.width;
-                const normalizedLastY = lastY / canvas.height;
+                const canvasDisplayWidth = isTabletRotated ? window.innerHeight : window.innerWidth;
+                const canvasDisplayHeight = isTabletRotated ? window.innerWidth : window.innerHeight;
+
+                const normalizedX = x / canvasDisplayWidth;
+                const normalizedY = y / canvasDisplayHeight;
+                const normalizedLastX = lastX / canvasDisplayWidth;
+                const normalizedLastY = lastY / canvasDisplayHeight;
 
                 const stroke = {
                     x1: normalizedLastX,
@@ -576,10 +577,13 @@
         }
 
         function drawStroke(stroke) {
-            const actualX1 = stroke.x1 * canvas.width;
-            const actualY1 = stroke.y1 * canvas.height;
-            const actualX2 = stroke.x2 * canvas.width;
-            const actualY2 = stroke.y2 * canvas.height;
+            const canvasDisplayWidth = isTabletRotated ? window.innerHeight : window.innerWidth;
+            const canvasDisplayHeight = isTabletRotated ? window.innerWidth : window.innerHeight;
+
+            const actualX1 = stroke.x1 * canvasDisplayWidth;
+            const actualY1 = stroke.y1 * canvasDisplayHeight;
+            const actualX2 = stroke.x2 * canvasDisplayWidth;
+            const actualY2 = stroke.y2 * canvasDisplayHeight;
 
             ctx.beginPath();
             ctx.moveTo(actualX1, actualY1);
