@@ -86,8 +86,15 @@
             background: white;
         }
 
-        #drawingArea.tablet-mode.force-landscape {
-            transform-origin: top left;
+        #drawingArea.tablet-mode {
+            transform: rotate(90deg);
+            transform-origin: center center;
+            width: 100vh;
+            height: 100vw;
+            left: 50%;
+            top: 50%;
+            margin-left: -50vh;
+            margin-top: -50vw;
         }
 
         #canvas {
@@ -169,12 +176,6 @@
 
         .landscape-hint {
             display: none;
-        }
-
-        @media screen and (max-width: 768px) and (orientation: portrait) {
-            #drawingArea.tablet-mode .landscape-hint {
-                display: none;
-            }
         }
     </style>
 </head>
@@ -419,60 +420,17 @@
         function initDrawing() {
             document.getElementById('drawingArea').style.display = 'block';
             
-            // Mark as tablet mode and rotate if this is the tablet
             if (role === 'tablet') {
                 document.getElementById('drawingArea').classList.add('tablet-mode');
-                rotateToLandscape();
-                window.addEventListener('resize', rotateToLandscape);
             }
             
             canvas = document.getElementById('canvas');
             ctx = canvas.getContext('2d');
 
-            updateCanvasSize();
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
             setupEventListeners();
-        }
-
-        function rotateToLandscape() {
-            const drawingArea = document.getElementById('drawingArea');
-            const isPortrait = window.innerHeight > window.innerWidth;
-            
-            if (isPortrait && role === 'tablet') {
-                drawingArea.classList.add('force-landscape');
-                const scale = window.innerHeight / window.innerWidth;
-                drawingArea.style.transform = `rotate(90deg) scale(${scale})`;
-                drawingArea.style.transformOrigin = 'top left';
-                drawingArea.style.width = `${window.innerHeight}px`;
-                drawingArea.style.height = `${window.innerWidth}px`;
-                drawingArea.style.left = `${window.innerHeight}px`;
-                drawingArea.style.top = '0';
-                
-                updateCanvasSize();
-            } else {
-                drawingArea.classList.remove('force-landscape');
-                drawingArea.style.transform = '';
-                drawingArea.style.width = '100%';
-                drawingArea.style.height = '100%';
-                drawingArea.style.left = '0';
-                drawingArea.style.top = '0';
-                
-                updateCanvasSize();
-            }
-        }
-
-        function updateCanvasSize() {
-            if (!canvas) return;
-            
-            const drawingArea = document.getElementById('drawingArea');
-            const isPortrait = window.innerHeight > window.innerWidth;
-            
-            if (isPortrait && role === 'tablet') {
-                canvas.width = window.innerHeight;
-                canvas.height = window.innerWidth;
-            } else {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            }
         }
 
         function setupEventListeners() {
@@ -499,7 +457,8 @@
 
             window.addEventListener('resize', () => {
                 const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                updateCanvasSize();
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
                 ctx.putImageData(imgData, 0, 0);
             });
         }
