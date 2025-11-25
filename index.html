@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drawing Tablet Connect - Fast P2P</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: #2a2a2a;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #ffffff;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+
+        .btn {
+            background: #404040;
+            color: white;
+            border: 2px solid #606060;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.2s, background 0.2s;
+            font-weight: 600;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            background: #505050;
+        }
+
+        .code-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: #ffffff;
+            margin: 30px 0;
+            letter-spacing: 8px;
+        }
+
+        input {
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #606060;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 300px;
+            text-align: center;
+            letter-spacing: 4px;
+            font-weight: 600;
+            background: #3a3a3a;
+            color: #ffffff;
+        }
+
+        #drawingArea {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+        }
+
+        #canvas {
+            display: block;
+            touch-action: none;
+            cursor: crosshair;
+        }
+
+        .toolbar {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px 25px;
+            border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            z-index: 1000;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .toolbar label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .toolbar input[type="color"] {
+            width: 50px;
+            height: 50px;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .toolbar input[type="range"] {
+            width: 150px;
+        }
+
+        .toolbar button {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .toolbar button:hover {
+            background: #ee5a52;
+        }
+
+        .size-display {
+            font-weight: 600;
+            color: #667eea;
+            min-width: 30px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .status {
+            margin-top: 20px;
+            color: #999;
+            font-style: italic;
+        }
+
+        .connection-badge {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="startScreen">
+        <h1>Drawing Tablet</h1>
+        <button class="btn" onclick="startAsTablet()">📱 I'm the Tablet</button>
+        <button class="btn" onclick="startAsReceiver()">🖥️ I'm the PC</button>
+    </div>
+
+    <div class="container hidden" id="tabletScreen">
+        <h1>Tablet Mode</h1>
+        <p>Share this code with your PC:</p>
+        <div class="code-display" id="connectionCode">----</div>
+        <p class="status" id="tabletStatus">Waiting for connection...</p>
+    </div>
+
+    <div class="container hidden" id="receiverScreen">
+        <h1>PC Mode</h1>
+        <p>Enter the code from your tablet:</p>
+        <input type="text" id="codeInput" maxlength="4" placeholder="----">
+        <br><br>
+        <button class="btn" onclick="connectToTablet()">Connect</button>
+        <p class="status" id="connectionStatus"></p>
+    </div>
+
+    <div id="drawingArea">
+        <div class="toolbar">
+            <label>Color:</label>
+            <input type="color" id="colorPicker" value="#000000">
+            <label>Size:</label>
+            <input type="range" id="sizePicker" min="1" max="50" value="5">
+            <span class="size-display" id="sizeDisplay">5</span>
+            <button onclick="clearCanvas()">Clear</button>
+            <button onclick="toggleEraser()">Eraser</button>
+        </div>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, getDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBKZOhqrbGqEHfXDWAHEJe1wRUWqF8q11M",
+            authDomain: "tablet-df3fb.firebaseapp.com",
+            projectId: "tablet-df3fb",
+            storageBucket: "tablet-df3fb.firebasestorage.app",
+            messagingSenderId: "984357983960",
+            appId: "1:984357983960:web:ecc3a843bc0653dabae9ad",
+            measurementId: "G-PR9ZG6GRTW"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let canvas, ctx;
+        let isDrawing = false;
+        let currentColor = '#000000';
+        let currentSize = 5;
+        let isEraser = false;
+        let sessionCode = '';
+        let role = '';
+        let lastX = 0;
+        let lastY = 0;
+
+        // WebRTC variables
+        let peerConnection = null;
+        let dataChannel = null;
+        let signalingUnsubscribe = null;
+        let isConnected = false;
+        let lastPingTime = 0;
+        let latency = 0;
+
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        window.startAsTablet = async function() {
+            role = 'tablet';
+            sessionCode = generateCode();
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('tabletScreen').classList.remove('hidden');
+            document.getElementById('connectionCode').textContent = sessionCode;
+
+            await setupPeerConnection(true);
+        };
+
+        window.startAsReceiver = function() {
+            role = 'receiver';
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('receiverScreen').classList.remove('hidden');
+        };
+
+        window.connectToTablet = async function() {
+            const code = document.getElementById('codeInput').value.toUpperCase();
+            if (code.length !== 4) {
+                document.getElementById('connectionStatus').textContent = 'Please enter a 4-digit code';
+                return;
+            }
+
+            sessionCode = code;
+            const docRef = doc(db, 'sessions', code);
+            const docSnap = await getDoc(docRef);
+
+            if (docSnap.exists()) {
+                document.getElementById('receiverScreen').classList.add('hidden');
+                await setupPeerConnection(false);
+            } else {
+                document.getElementById('connectionStatus').textContent = 'Invalid code. Please try again.';
+            }
+        };
+
+        async function setupPeerConnection(isInitiator) {
+            peerConnection = new RTCPeerConnection(configuration);
+
+            if (isInitiator) {
+                dataChannel = peerConnection.createDataChannel('drawing', {
+                    ordered: false,
+                    maxRetransmits: 0
+                });
+                setupDataChannel();
+            } else {
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel();
+                };
+            }
+
+            peerConnection.onicecandidate = async (event) => {
+                if (event.candidate) {
+                    await updateDoc(doc(db, 'sessions', sessionCode), {
+                        [`${role}_candidates`]: event.candidate.toJSON()
+                    });
+                }
+            };
+
+            if (isInitiator) {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                await setDoc(doc(db, 'sessions', sessionCode), {
+                    offer: {
+                        type: offer.type,
+                        sdp: offer.sdp
+                    },
+                    tablet_candidates: null,
+                    receiver_candidates: null,
+                    timestamp: Date.now()
+                });
+
+                signalingUnsubscribe = onSnapshot(doc(db, 'sessions', sessionCode), async (snapshot) => {
+                    const data = snapshot.data();
+                    if (data?.answer && !peerConnection.currentRemoteDescription) {
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    }
+                    if (data?.receiver_candidates) {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.receiver_candidates));
+                    }
+                });
+            } else {
+                signalingUnsubscribe = onSnapshot(doc(db, 'sessions', sessionCode), async (snapshot) => {
+                    const data = snapshot.data();
+                    if (data?.offer && !peerConnection.currentRemoteDescription) {
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                        const answer = await peerConnection.createAnswer();
+                        await peerConnection.setLocalDescription(answer);
+                        await updateDoc(doc(db, 'sessions', sessionCode), {
+                            answer: {
+                                type: answer.type,
+                                sdp: answer.sdp
+                            }
+                        });
+                    }
+                    if (data?.tablet_candidates) {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.tablet_candidates));
+                    }
+                });
+            }
+        }
+
+        function setupDataChannel() {
+            dataChannel.onopen = () => {
+                isConnected = true;
+                document.getElementById('tabletScreen')?.classList.add('hidden');
+                document.getElementById('receiverScreen')?.classList.add('hidden');
+                initDrawing();
+                
+                if (signalingUnsubscribe) {
+                    signalingUnsubscribe();
+                }
+            };
+
+            dataChannel.onclose = () => {
+                isConnected = false;
+            };
+
+            dataChannel.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                handleMessage(message);
+            };
+        }
+
+        function sendMessage(message) {
+            if (dataChannel?.readyState === 'open') {
+                dataChannel.send(JSON.stringify(message));
+            }
+        }
+
+        function handleMessage(message) {
+            switch (message.type) {
+                case 'stroke':
+                    drawRemoteStroke(message.data);
+                    break;
+                case 'color':
+                    currentColor = message.color;
+                    document.getElementById('colorPicker').value = currentColor;
+                    break;
+                case 'size':
+                    currentSize = message.size;
+                    document.getElementById('sizePicker').value = currentSize;
+                    document.getElementById('sizeDisplay').textContent = currentSize;
+                    break;
+                case 'clear':
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    break;
+            }
+        }
+
+        function generateCode() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let code = '';
+            for (let i = 0; i < 4; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        function initDrawing() {
+            document.getElementById('drawingArea').style.display = 'block';
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing);
+
+            canvas.addEventListener('touchstart', handleTouch);
+            canvas.addEventListener('touchmove', handleTouch);
+            canvas.addEventListener('touchend', stopDrawing);
+
+            document.getElementById('colorPicker').addEventListener('change', (e) => {
+                currentColor = e.target.value;
+                isEraser = false;
+                sendMessage({ type: 'color', color: currentColor });
+            });
+
+            document.getElementById('sizePicker').addEventListener('input', (e) => {
+                currentSize = e.target.value;
+                document.getElementById('sizeDisplay').textContent = currentSize;
+                sendMessage({ type: 'size', size: parseInt(currentSize) });
+            });
+
+            window.addEventListener('resize', () => {
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                ctx.putImageData(imgData, 0, 0);
+            });
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            lastX = e.clientX - rect.left;
+            lastY = e.clientY - rect.top;
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const stroke = {
+                x1: lastX,
+                y1: lastY,
+                x2: x,
+                y2: y,
+                color: isEraser ? '#FFFFFF' : currentColor,
+                size: currentSize
+            };
+
+            drawStroke(stroke);
+            sendMessage({ type: 'stroke', data: stroke });
+
+            lastX = x;
+            lastY = y;
+        }
+
+        function handleTouch(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent(e.type === 'touchstart' ? 'mousedown' : 'mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        function drawStroke(stroke) {
+            ctx.beginPath();
+            ctx.moveTo(stroke.x1, stroke.y1);
+            ctx.lineTo(stroke.x2, stroke.y2);
+            ctx.strokeStyle = stroke.color;
+            ctx.lineWidth = stroke.size;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+        }
+
+        function drawRemoteStroke(stroke) {
+            drawStroke(stroke);
+        }
+
+        window.clearCanvas = function() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            sendMessage({ type: 'clear' });
+        };
+
+        window.toggleEraser = function() {
+            isEraser = !isEraser;
+            canvas.style.cursor = isEraser ? 'cell' : 'crosshair';
+        };
+    </script>
+</body>
+</html>
