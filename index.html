@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Drawing Tablet Connect - Fast P2P</title>
     <style>
         * {
@@ -19,6 +19,16 @@
             justify-content: center;
             align-items: center;
             overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        body.tablet-rotated {
+            transform: rotate(90deg);
+            transform-origin: center center;
+            width: 100vh;
+            height: 100vw;
         }
 
         .container {
@@ -82,9 +92,14 @@
             position: fixed;
             top: 0;
             left: 0;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
             background: white;
+        }
+
+        body.tablet-rotated #drawingArea {
+            width: 100vh;
+            height: 100vw;
         }
 
         #canvas {
@@ -244,14 +259,8 @@
             isTabletRotated = true;
             sessionCode = generateCode();
             
-            // Lock screen orientation to landscape
-            try {
-                if (screen.orientation && screen.orientation.lock) {
-                    await screen.orientation.lock('landscape');
-                }
-            } catch (e) {
-                console.log('Orientation lock not supported');
-            }
+            // Add rotation class to body
+            document.body.classList.add('tablet-rotated');
             
             document.getElementById('startScreen').classList.add('hidden');
             document.getElementById('tabletScreen').classList.remove('hidden');
@@ -416,9 +425,15 @@
             canvas = document.getElementById('canvas');
             ctx = canvas.getContext('2d');
 
-            // Set canvas resolution to match display size
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            // Set canvas resolution based on rotation
+            if (isTabletRotated) {
+                // When rotated, swap width and height
+                canvas.width = window.innerHeight;
+                canvas.height = window.innerWidth;
+            } else {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
 
             setupEventListeners();
         }
@@ -447,8 +462,13 @@
 
             window.addEventListener('resize', () => {
                 const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
+                if (isTabletRotated) {
+                    canvas.width = window.innerHeight;
+                    canvas.height = window.innerWidth;
+                } else {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                }
                 ctx.putImageData(imgData, 0, 0);
             });
         }
@@ -456,11 +476,25 @@
         function getCanvasCoordinates(clientX, clientY) {
             const rect = canvas.getBoundingClientRect();
             
-            // Get the actual position relative to canvas
-            const x = (clientX - rect.left) * (canvas.width / rect.width);
-            const y = (clientY - rect.top) * (canvas.height / rect.height);
-            
-            return { x, y };
+            if (isTabletRotated) {
+                // When rotated, we need to transform the coordinates
+                // The visual rotation is 90deg clockwise, so we need to map:
+                // visual X -> canvas Y (from bottom)
+                // visual Y -> canvas X
+                const visualX = clientX - rect.left;
+                const visualY = clientY - rect.top;
+                
+                // Map to canvas coordinates accounting for rotation
+                const x = visualY * (canvas.width / rect.height);
+                const y = (rect.width - visualX) * (canvas.height / rect.width);
+                
+                return { x, y };
+            } else {
+                // No rotation, standard mapping
+                const x = (clientX - rect.left) * (canvas.width / rect.width);
+                const y = (clientY - rect.top) * (canvas.height / rect.height);
+                return { x, y };
+            }
         }
 
         function startDrawing(e) {
